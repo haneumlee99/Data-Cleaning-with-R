@@ -1,0 +1,341 @@
+---
+title: "STAT 325 Final Exam"
+author: "Claude Lee"
+date: "May 10, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(Lahman)
+library(lubridate)
+```
+
+# 1. 
+### Primary keys for `Master`, `Batting`, `Pitching`, and `Fielding`.
+```{r 1-1, collapse = TRUE}
+nrow(Master)
+count(count(Master, playerID))[[1]]
+```
+
+Primary key for `Master`: `playerID`
+
+
+```{r 1-2, collapse = TRUE}
+nrow(Batting)
+group_by(Batting, playerID, yearID) %>% 
+  nrow()
+```
+
+Primary key for `Batting`: `playerID` and `yearID` together.
+
+
+```{r 1-3, collapse = TRUE}
+nrow(Pitching)
+group_by(Pitching, playerID, yearID) %>% 
+  nrow()
+```
+
+Primary key for `Pitching`: `playerID`, and `yearID` together.
+
+
+```{r 1-4, collapse = TRUE}
+nrow(Fielding)
+group_by(Fielding, playerID, yearID) %>% 
+  nrow()
+```
+
+Primary key for `Fielding`: `playerID`, and `yearID` together.
+
+
+
+
+# 2. 
+### Cacreer statistics for each player with `Batting`.
+```{r 2-1}
+Batting2 <- Batting %>%
+  group_by(playerID) %>% 
+  mutate(G = sum(G, na.rm = TRUE), AB = sum(AB, na.rm = TRUE), 
+         R = sum(R, na.rm = TRUE), H = sum(H, na.rm = TRUE), 
+         X2B = sum(X2B, na.rm = TRUE), X3B = sum(X3B, na.rm = TRUE),
+         HR = sum(HR, na.rm = TRUE), RBI = sum(RBI, na.rm = TRUE), 
+         SB = sum(SB, na.rm = TRUE), CS = sum(CS, na.rm = TRUE), 
+         BB = sum(BB, na.rm = TRUE), SO = sum(SO, na.rm = TRUE), 
+         IBB = sum(IBB, na.rm = TRUE), HBP = sum(HBP, na.rm = TRUE), 
+         SH = sum(SH, na.rm = TRUE), SF = sum(SF, na.rm = TRUE),
+         GIDP = sum(GIDP, na.rm = TRUE))
+as_tibble(Batting2)
+```
+
+Use `mutate`.
+
+It was possible to make a function with loops to get sums for multiple variables, however since the time that it takes to run all the loops, it becomes inefficient (takes about 3 minutes). Below is the function that runs the loop.
+```{r 2-2, eval=FALSE, include=TRUE}
+mutatesum1 <- function(df,keyIndex, i, j) {
+  #Arrange the dataframe with key first.
+  #keyIndex: position of the key in column
+  #i: position of the variable to start
+  #j: position of the variable to finish
+  varsum <- matrix(nrow = nrow(df), ncol = j-i+1)
+  for (obs in 1:nrow(df)) {
+    for (vars in i:j) {
+      if (is.na(df[obs, vars])) {
+        varsum[obs, vars-i+1] <- 0
+      } 
+      if (obs == 1) {
+        varsum[obs, vars-i+1] <- df[obs, vars]
+      } else if (df[obs, keyIndex] == df[obs-1, keyIndex]) {
+        varsum[obs, vars-i+1] <- df[obs, vars] + varsum[obs-1, vars-i+1]
+        l <- 1
+        while (df[obs, keyIndex] == df[obs-l, keyIndex]) {
+          varsum[obs-l, vars-i+1] <- varsum[obs, vars-i+1]
+          l <- l+1
+          if (obs-l == 0){
+            break
+          }
+        }
+      } else {
+        varsum[obs, vars-i+1] <- df[obs, vars]
+      }
+    }
+  }
+  df[, i:j] <- varsum
+}
+```
+
+
+
+
+# 3. 
+### Do (2) with `Pitching`.
+```{r 3}
+Pitching2 <- Pitching %>%
+  group_by(playerID) %>% 
+  mutate(W = sum(W, na.rm = TRUE), L = sum(L, na.rm = TRUE), 
+         G = sum(G, na.rm = TRUE), GS = sum(GS, na.rm = TRUE), 
+         CG = sum(CG, na.rm = TRUE), SHO = sum(SHO, na.rm = TRUE),
+         SV = sum(SV, na.rm = TRUE), IPouts = sum(IPouts, na.rm = TRUE), 
+         H = sum(H, na.rm = TRUE), ER = sum(ER, na.rm = TRUE), 
+         HR = sum(HR, na.rm = TRUE), BB = sum(BB, na.rm = TRUE), 
+         SO = sum(SO, na.rm = TRUE), IBB = sum(IBB, na.rm = TRUE),
+         WP = sum(WP, na.rm = TRUE), HBP = sum(HBP, na.rm = TRUE),
+         BK = sum(BK, na.rm = TRUE), BFP = sum(BFP, na.rm = TRUE),
+         GF = sum(GF, na.rm = TRUE), R = sum(R, na.rm = TRUE),
+         SH = sum(SH, na.rm = TRUE), SF = sum(SF, na.rm = TRUE),
+         GIDP = sum(GIDP, na.rm = TRUE))
+as_tibble(Pitching2)
+```
+
+
+
+
+# 4. 
+### `Batting4` with statistics and players' info.
+```{r 4}
+Batting3 <- as_tibble(battingStats(Batting2))
+
+#selects variables we need from `Master` data.
+BattingInfo <- Master %>%
+  select(playerID, starts_with("name"), bats, throws)
+
+#join the data on the right side
+Batting4 <- Batting3 %>% 
+  left_join(Master, by = "playerID")
+
+as_tibble(select(Batting4, playerID, starts_with("name"), bats, throws, everything()))
+```
+
+
+
+
+# 5.
+### Combine `Batting4` and `Pitching2`.
+```{r 5-1}
+BatPitch1 <- Batting4 %>% 
+  filter(PA > 0) %>% 
+  semi_join(Pitching2, by = "playerID") %>% 
+  left_join(Pitching2, by = "playerID")
+BatPitch1
+```
+
+This table has some problem. Some varibles are shared in both dataframe, so it creates duplicated varaibles. So, let's filter out those variables, then join them.
+
+```{r 5.2}
+# Defind a function that finds a vector of varaible names that are in both data frame.
+dupVar <- function(x,y, from) {
+  dupVar <- vector()
+  count <- 1
+  for (i in from:ncol(x)) {
+    if (names(x[i]) %in% variable.names(y)){
+      dupVar[count] <- names(x[i])
+      count <- 1+count
+    }
+  }
+  return(dupVar)
+}
+
+# Remove the variable (By start from 2, the first variable `playerID` is kept).
+PitchRM1 <- Pitching2 %>% 
+  select(-c(dupVar(Pitching2, Batting4,2)))
+
+# Join
+BatPitch1 <- Batting4 %>% 
+  filter(PA > 0) %>% 
+  semi_join(PitchRM1, by = "playerID") %>% 
+  left_join(PitchRM1, by = "playerID")
+
+BatPitch1
+```
+
+
+
+
+# 6. 
+### Write a function `HR_rate` that calculates `HR/G` and returns the original table with sorted by new variable.
+```{r 6}
+HR_rate <- function(df) {
+  df2 <- df %>% 
+    mutate(HR_G = HR / G) %>% 
+    select(playerID:lgID, HR_G, everything()) %>% 
+    arrange(desc(HR_G))
+  return(df2)
+}
+
+as_tibble(HR_rate(Batting))
+```
+
+In order to keep the `Batting` as it as, we will return a new table with the new variable, instead of overriding the original table, since it gets used later too.
+
+
+# 7. 
+### Create `Batting5` by relevel `lgID` of `Batting` as `AL`, `NL`, and `Other`.
+
+First, let's check the levels of `lgID`.
+
+```{r 7-1, collapse = TRUE}
+levels(Batting$lgID)
+```
+
+There are `AA`, `FL`, `NA`, `PL`, and `UA` that are not `AL` or `NL`. Therefore, let's collapse them into the `Other` level.
+
+```{r 7-2}
+Batting5 <- Batting %>%
+  mutate(lgID = fct_collapse(lgID,
+                             AL = "AL",
+                             NL = "NL",
+                             Other = c("AA", "FL", "NA", "PL", "UA")))
+as_tibble(Batting5)
+```
+
+
+
+
+# 8. 
+### Create integer variables `debutYear`, `debutMonth`, and `debutDay` from `Master$debut`. Then, create `debutDate` and `debutAge` into `Master2`.
+```{r 8}
+Master2 <- Master %>% 
+  mutate(debutYear = as.integer(str_sub(debut, 1, 4)), 
+         debutMonth = as.integer(str_sub(debut, 6, 7)),
+         debutDay = as.integer(str_sub(debut, 9, 10)),
+         debutDate = make_date(debutYear, debutMonth, debutDay), 
+         birthDate = ymd(birthDate),
+         debutAge = as.period(interval(birthDate, debutDate), unit = "year")$year)
+
+as_tibble(select(Master2, playerID, debutDate, debutAge, everything()))
+```
+
+
+
+
+# 9. 
+### Use `Master$birthCountry` to create a factor variable called `birthContinent` that gives the continent of each player's birth.
+
+Before creating a factor, let's check the levels of the variable.
+
+```{r 9-1, collapse = TRUE}
+unique(Master2$birthCountry)
+```
+
+Now, let's convert the variable as a factor and define the levels.
+
+```{r 9-2}
+Master2 <- Master2 %>% 
+  mutate(birthCountry = factor(birthCountry, levels = unique(birthCountry))) %>% 
+  mutate(birthContinent = fct_collapse(birthCountry, 
+                                       `North America` = c("USA", "CAN"),
+                                       `Latin America` = c("D.R.", "Venezuela",
+                                                           "Cuba", "Mexico",
+                                                           "Colombia", "Nicaragua", 
+                                                           "Bahamas", "P.R.", "Curacao", 
+                                                           "Aruba", "Jamaica", "Brazil", 
+                                                           "Belize", "Honduras", 
+                                                           "American Samoa", "V.I."),
+                                       `Europe` = c("Germany", "Norway", "Czech Republic",
+                                                    "Netherlands", "Ireland", "Italy",
+                                                    "United Kingdom", "France", "Sweden", 
+                                                    "Spain", "Greece", "Poland", "Denmark", 
+                                                    "Switzerland", "Austria", "Belgium", 
+                                                    "Finland", "Lithuania", "Latvia", 
+                                                    "Slovakia", "Portugal"),
+                                       `Asia` = c("Russia", "Japan", "South Korea", 
+                                                  "Hong Kong", "Afghanistan", "Taiwan",
+                                                  "Philippines", "Viet Nam", "China", 
+                                                  "Indonesia", "Saudi Arabia"),
+                                       `Oceania` = c("Australia", "Guam", "Singapore"),
+                                       `Afrika` = c("South Africa"),
+                                       `Other` = c("At Sea")))
+as_tibble(select(Master2, playerID, birthCountry, birthContinent, debutAge, debutDate, everything()))
+```
+
+
+
+
+# 10.
+### `Master2` with checking difference in `bats` and `throws`.
+```{r 10}
+SameDiff <- function(df) {
+  Same_Dif <- character(nrow(df))
+  for (i in 1:nrow(df)) {
+    if (is.na(as.character(df$bats[i]) == as.character(df$throws[i]))){
+      Same_Dif[i] <- NA
+    } else if (as.character(df$bats[i]) == as.character(df$throws[i])) {
+      Same_Dif[i] <-  "Same"
+    } else {
+      Same_Dif[i] <-  "Different"
+    }
+  }
+  df2 <- df %>% 
+    mutate(Same_Dif = Same_Dif)
+  return(df2)
+}
+
+as_tibble(select(SameDiff(Master2), playerID, Same_Dif, bats, throws, birthCountry, birthContinent, debutAge, debutDate, everything()))
+```
+
+
+
+
+# 11.
+### Same as (10), but only with one of the `map*` functions.
+```{r 11}
+SameDiffFnc <- function(x, y) {
+  if (is.na(x==y)) {
+    return(NA)
+  } else if (x == y) {
+    return("Same")
+  } else {
+    return("Different")
+  }
+}
+
+SameDiffDf <- function(df) {
+  Same_Dif_map <- map2_chr(as.character(df$bats), as.character(df$throws), SameDiffFnc)
+  df2 <- df %>% 
+    mutate(Same_Dif_map = Same_Dif_map)
+  return(df2)
+}
+
+as_tibble(select(SameDiffDf(Master2), playerID, Same_Dif_map, bats, throws, birthCountry, birthContinent, debutAge, debutDate, everything()))
+```
+
